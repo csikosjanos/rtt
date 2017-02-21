@@ -1,0 +1,16 @@
+{
+  "name": "tw",
+  "version": "1.0.0",
+  "description": "ReTweet Tracker",
+  "main": "index.js",
+  "dependencies": {
+    "twitter-node-client": "0.0.6",
+    "winston": "^2.3.1"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Janos Csikos <janos@csikos.co.uk>",
+  "license": "MIT"
+}
