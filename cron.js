@@ -6,6 +6,8 @@ var Twitter = require('twitter-node-client').Twitter;
 // Reading the config file
 var config = require('./config.json');
 
+// winston.info('config:' + JSON.stringify(config));
+
 // Creating instances of 3rd party libs
 var twitter = new Twitter(config.twitterApiAuth);
 
@@ -19,7 +21,7 @@ var touch = function(filePath) {
 // Twitter functions
 
 var getNumberOfReTweets = function(tweetId) {
-  var p = new Promise(function(pResolve, pReject) {
+  return new Promise(function(pResolve, pReject) {
     var getTweetPromise = new Promise(function(gtpResolve, gtpReject) {
 
       winston.info('Getting the number of RTs');
@@ -29,48 +31,52 @@ var getNumberOfReTweets = function(tweetId) {
 
     getTweetPromise
       .then(function(tweet) {
+        winston.info('success of num of rts: ' + tweet.retweet_count);
         if (tweet && typeof tweet.retweet_count !== 'undefined') {
+          winston.info('all fine with the number');
           pResolve(tweet.retweet_count);
         } else {
-          p.resolve(0);
+          winston.info('no number so lets resolve with 0');
+          pResolve(0);
         }
       })
       .catch(function(err, response, body) {
+        winston.error('error of num req');
         pReject(err);
       });
   });
-  return p;
 };
 
 var getReTweetsOfATweet = function(tweetId) {
-  var p = new Promise(function(pResolve, pReject) {
+  return new Promise(function(resolve, reject) {
 
     winston.info('Getting the RTs of tweet');
 
     var getRetweetsOfAPostURL = twitter.baseUrl + '/statuses/retweets/' + tweetId + '.json?count=100';
-    twitter.doRequest(getRetweetsOfAPostURL, error(pReject), success(pResolve));
-    return p;
+    twitter.doRequest(getRetweetsOfAPostURL, error(reject), success(resolve));
   });
 };
 
-var error = function(pReject) {
+var error = function(reject) {
   return function(err, response, body) {
     winston.error('Twitter Request Errror', { 'err': err });
-    pReject(err);
+    reject(err);
   };
 };
 
-var success = function(pResolve) {
+var success = function(resolve) {
   return function(data) {
     var twData = JSON.parse(data);
     winston.info('Twitter Request Success');
-    pResolve(twData);
+    resolve(twData);
   };
 };
 
 var finishWithError = function(lockFile, reason) {
-  fs.unlinkSync(lockFile);
-  winston.error(reason);
+  return function() {
+    fs.unlinkSync(lockFile);
+    winston.error(reason);
+  };
 };
 
 
@@ -78,6 +84,8 @@ winston.info('Cron script started. Checking ' + config.tweets.length + ' tweets 
 
 // Do for each tweet in the config file
 config.tweets.forEach(function (tweet) {
+
+  // winston.info('Start processing: ' + JSON.stringify(tweet));
 
   var now = (new Date).toJSON();
 
@@ -95,7 +103,7 @@ config.tweets.forEach(function (tweet) {
     // ReTweets file represents the amount of the tweets when last checked
     var rtsFile = tweetFolder + '/.rts';
     // Prefix for the filename that the retweets going to be saved;
-    var twtsFileNamePrefix = tweetFolder + 'retweets.';
+    var twtsFileNamePrefix = tweetFolder + '/retweets.';
 
     // If the tweet foler is not exists
     if (!fs.existsSync(tweetFolder)) {
@@ -122,18 +130,20 @@ config.tweets.forEach(function (tweet) {
           // If there are new retweets
           if (parseInt(newRTs, 10) !== oldRTs) {
 
-            winston.log('We have few new RTs (' + newRTs + ') comparing to last time (' + oldRTs + ')');
+            winston.info('We have few new RTs (' + newRTs + ') comparing to last time (' + oldRTs + ')');
 
             // Get the retweets
             getReTweetsOfATweet(tweet.tweetId)
               .then(function(reTweets){
+
+                winston.info('we have retweets: ' + reTweets.length);
 
                 //update the rtsfile
                 fs.writeFileSync(rtsFile, newRTs);
 
                 //save the new retweets
                 var twtsFileName = twtsFileNamePrefix + now.replace(/-|:|T|Z|\./gi, '') + '.json';
-                fs.writeFileSync(twtsFileName, reTweets);
+                fs.writeFileSync(twtsFileName, JSON.stringify(reTweets));
 
                 //log success
                 winston.info('New JSON successfully saved with ' + newRTs + ' RTs in ' + twtsFileName);
@@ -144,7 +154,10 @@ config.tweets.forEach(function (tweet) {
               .catch(finishWithError(lockFile, 'Tried to get the retweets for: ' + tweet.tweetId));
           } else {
 
-            winston.log('We have now same amount (' + newRTs + ') of RTs as last time (' + oldRTs + ')');
+            winston.info('We have now same amount (' + newRTs + ') of RTs as last time (' + oldRTs + ')');
+
+            //remove lockfile
+            fs.unlinkSync(lockFile);
           }
         })
         .catch(finishWithError(lockFile, 'Tried to get the number of retweets for: ' + tweet.tweetId));
